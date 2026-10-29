@@ -1,6 +1,6 @@
 # HeimEnergie Dashboard
 
-**Version 0.1.1 – experimenteller Prototyp** · Sprache: Deutsch · MIT-Lizenz
+**Version 0.1.2 – experimenteller Prototyp** · Sprache: Deutsch · MIT-Lizenz
 
 Ein modulares, mobiles Home-Assistant-Energiedashboard **ohne Pflicht zum Netzbezugszähler**, ohne zusätzlichen Server und ohne eigene Datenbank. HeimEnergie liest ausschließlich bereits vorhandene Home-Assistant-Entitäten und ändert keine Sensoren, Zähler oder Konfiguration.
 
@@ -22,8 +22,8 @@ Ein modulares, mobiles Home-Assistant-Energiedashboard **ohne Pflicht zum Netzbe
 - Tag/Monat/Jahr benötigen ebenfalls entsprechende Sensoren. Nicht verfügbare Daten erscheinen als `—`, nicht als fiktive `0`.
 - Der aktuelle Preis wird zur Berechnung fehlender Kosten verwendet; **dynamische historische Tarife werden noch nicht berücksichtigt**.
 - Die Summe ist nur die Summe **überwachter Geräte**, kein vollständiger Hausverbrauch. Fehlende Sensoren werden als *Teilsumme* kenntlich gemacht.
-- Keine historischen Kurven oder frei wählbaren Datumsintervalle in v0.1.0.
-- noch **nicht in einer echten HA-Installation validiert**: Browser-/Home-Assistant-Tests nach Installation erforderlich.
+- Keine historischen Kurven oder frei wählbaren Datumsintervalle in v0.1.2.
+- In Home Assistant auf Android getestet; für v0.1.2 steht die Bestätigung des behobenen Editor-Fokusproblems noch aus.
 
 ## Voraussetzungen
 
@@ -47,7 +47,7 @@ Der neue offizielle Home-Assistant-Marketplace ist für die gleiche Frontend-Mod
 
 1. Die Datei `dist/heimenergie-dashboard.js` nach `/config/www/heimenergie-dashboard.js` kopieren (bei neu angelegtem `/config/www` einmal HA neu starten).
 2. Home Assistant → **Einstellungen → Dashboards → ⋮ → Ressourcen** → Ressource hinzufügen:
-   - URL: `/local/heimenergie-dashboard.js?v=0.1.1`
+   - URL: `/local/heimenergie-dashboard.js?v=0.1.2`
    - Ressourcentyp: `JavaScript-Modul`
 3. Browser/App neu laden; **Dashboard hinzufügen → Community-Dashboards → HeimEnergie**.
 
@@ -59,6 +59,13 @@ Ein Strompreis-Helfer ist optional. Im Einrichtungsdialog kann ein bereits vorha
 
 **Datenschutz:** Persönliche Gerätezuordnungen werden nicht in den Quellcode geschrieben. Öffentliche Projektdateien, Dokumentation und Tests enthalten nur neutrale, fiktive Beispiele. Die lokale Konfiguration bleibt in Home Assistant. Nicht zum Teilen bestimmt sind Exportdateien mit echten Dashboard- oder Sensorzuordnungen.
 
+## Änderungen in v0.1.2
+
+- **Android-Editor:** Der Eingabefokus und geöffnete Auswahlfelder bleiben bei laufenden Home-Assistant-Zustandsaktualisierungen erhalten.
+- **Sensorzuordnung:** Nach Auswahl eines Sensors wird nicht mehr der gesamte Editor neu aufgebaut.
+- **Bestehende Einstellungen:** Unverändert; kein neues Dashboard und keine neue Konfiguration erforderlich.
+- Die automatisch erkannte Gerätezahl oder fehlende Wochenwerte sind mit diesem Wartungsupdate noch nicht behoben.
+
 ## Entwicklung
 
 Die gesamte Logik liegt bewusst zunächst in **einer** kleinen JavaScript-Datei unter `dist/`. Es gibt keine Build-Abhängigkeiten. Spätere Versionen können auf mehrere Module aufgeteilt werden. Die Widgets verwenden Shadow DOM und Home-Assistant-Themevariablen.
@@ -68,6 +75,7 @@ Tests (Node.js, kein npm erforderlich):
 ```sh
 node --check dist/heimenergie-dashboard.js
 node tests/smoke.cjs
+python tests/browser_smoke.py  # optional: benötigt Playwright + Chromium
 ```
 
 Offene nächste Punkte: reale HA-Installation prüfen, verbesserte dynamische Sensorzuordnung, wöchentliche Werte aus HA-Statistiken statt zusätzlichen Sensoren, Langzeitdiagramme, UI-Politur, Mehrsprachigkeit (DE/EN), Gerätegruppen und Import historischer Termumeter-Zählerstände.

@@ -1,7 +1,7 @@
-/* HeimEnergie Dashboard - v0.1.1 (MIT). No external dependencies. */
+/* HeimEnergie Dashboard - v0.1.2 (MIT). No external dependencies. */
 (() => {
   "use strict";
-  const VERSION = "0.1.1";
+  const VERSION = "0.1.2";
   const STRATEGY = "heimenergie";
   const PERIODS = [
     ["today", "Heute"], ["week", "Woche"],
@@ -252,12 +252,36 @@
     constructor() {
       super(); this.attachShadow({mode:"open"}); this._config={type:`custom:${STRATEGY}`,devices:[],tariff_fixed:""};
       this._hass=null;
+      this._rendered=false;
       this.shadowRoot.addEventListener("click",(e)=>this.onClick(e));
       this.shadowRoot.addEventListener("change",(e)=>this.onChange(e));
     }
-    set hass(hass) { this._hass=hass; this.render(); }
-    setConfig(cfg) { this._config = {...cfg, devices: Array.isArray(cfg.devices)?cfg.devices.map(x=>({...x})):[]}; this.render(); }
-    updated() { this.dispatchEvent(new CustomEvent("config-changed",{detail:{config:{...this._config,devices:this._config.devices.map(x=>({...x}))}},bubbles:true,composed:true})); this.render(); }
+    // HA publishes frequent hass updates (sometimes several per second). Replacing
+    // input/select elements on each update dismisses the Android IME and picker.
+    // An open editor needs stable DOM nodes; the sensor list refreshes when the
+    // editor is first opened or its actual configuration is changed externally.
+    set hass(hass) {
+      const firstHass = !this._hass;
+      this._hass = hass;
+      if (firstHass || !this._rendered) this.render();
+    }
+    setConfig(cfg) {
+      const incoming = {...cfg, devices: Array.isArray(cfg.devices)?cfg.devices.map(x=>({...x})):[]};
+      // The dashboard echoes config-changed back through setConfig. Never destroy
+      // the focused input/select when the data are unchanged.
+      if (this._rendered && JSON.stringify(incoming) === JSON.stringify(this._config)) return;
+      this._config = incoming;
+      this.render();
+    }
+    updated(rebuild=false) {
+      if (rebuild) this.render();
+      // Notify HA without rebuilding the fields being edited. Using 'change'
+      // (not per-keystroke 'input') keeps the Android keyboard stable.
+      this.dispatchEvent(new CustomEvent("config-changed",{
+        detail:{config:{...this._config,devices:this._config.devices.map(x=>({...x}))}},
+        bubbles:true,composed:true,
+      }));
+    }
     onClick(e) {
       const btn = e.target.closest("[data-action]"); if (!btn) return;
       if (btn.dataset.action==="add") {
@@ -272,7 +296,8 @@
         }
       }
       if (btn.dataset.action==="remove") this._config.devices.splice(Number(btn.dataset.index),1);
-      this.updated();
+      // Adding/removing devices changes the editor structure, so rebuild here.
+      this.updated(true);
     }
     onChange(e) {
       const el=e.target; const field=el.dataset.field;
@@ -282,6 +307,10 @@
         if (!dev) return;
         dev[field]=el.value;
       } else this._config[field]=el.value;
+      if (field==="name") {
+        const summary = el.closest("details.editor-device")?.querySelector("summary");
+        if (summary) summary.textContent=el.value||"Unbenannt";
+      }
       this.updated();
     }
     render() {
@@ -315,6 +344,7 @@
         ${devices.length?"":`<div class="empty">Bitte mindestens ein Gerät hinzufügen.</div>`}
         <div class="note">Speichern erfolgt über den Home-Assistant-Dialog. Ein fehlender Zeitraum bleibt leer, statt einen ungenauen Wert zu erfinden.</div>
       </ha-card>`;
+      this._rendered = true;
     }
   }
 
