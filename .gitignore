@@ -1,0 +1,12 @@
+.DS_Store
+node_modules/
+*.log
+# Local-only configuration and exports must never be published
+.env
+.env.*
+local-config/
+private/
+*.local.json
+*.local.yaml
+*.private.json
+*.private.yaml
