@@ -1,0 +1,22 @@
+name: Tests und Syntax
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: JavaScript-Syntax
+        run: node --check dist/heimenergie-dashboard.js
+      - name: Smoke-Test
+        run: node tests/smoke.cjs
+      - name: HACS-Metadaten validieren
+        run: |
+          node -e "const fs=require('fs');const h=JSON.parse(fs.readFileSync('hacs.json'));if(h.filename!=='heimenergie-dashboard.js')throw Error('HACS-Dateiname');if(!fs.existsSync('dist/'+h.filename))throw Error('Dashboard-Datei fehlt');console.log('HACS-Metadaten OK')"

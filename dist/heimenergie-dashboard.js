@@ -1,7 +1,7 @@
-/* HeimEnergie Dashboard - v0.3.0-alpha (MIT). No external dependencies. */
+/* HeimEnergie Dashboard - v0.3.1-alpha (MIT). No external dependencies. */
 (() => {
   "use strict";
-  const VERSION = "0.3.0-alpha";
+  const VERSION = "0.3.1-alpha";
   const STRATEGY = "heimenergie";
   const PERIODS = [
     ["today", "Heute"], ["week", "Woche"],

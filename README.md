@@ -1,8 +1,13 @@
 # HeimEnergie Dashboard
 
-**Version 0.3.0-alpha** · Deutsch · MIT-Lizenz · Home Assistant Community Dashboard
+**Version 0.3.1-alpha** · Deutsch · MIT-Lizenz · Home Assistant Community Dashboard
 
 HeimEnergie ist eine mobile Energieoberfläche mit **Übersicht**, **Geräten** und **Auswertung**. In Verbindung mit der **HeimEnergie Integration v0.2.4 oder neuer** übernimmt es automatisch Geräte, Leistungs-, Energie- und Kostensensoren aus dem lokalen Katalog. **Ein Netzbezugszähler ist nicht erforderlich.**
+
+## Neu in v0.3.1-alpha (Pflege-Release)
+
+- GitHub-Releases, Versionshistorie und automatische Tests für erkennbare HACS-Aktualisierungen.
+- Keine Änderungen an Datenerfassung, Bedienung oder Berechnung gegenüber v0.3.0-alpha.
 
 ## Neu in v0.3.0-alpha
 
