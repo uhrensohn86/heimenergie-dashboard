@@ -1,7 +1,7 @@
-/* HeimEnergie Dashboard - v0.1.2 (MIT). No external dependencies. */
+/* HeimEnergie Dashboard - v0.3.0-alpha (MIT). No external dependencies. */
 (() => {
   "use strict";
-  const VERSION = "0.1.2";
+  const VERSION = "0.3.0-alpha";
   const STRATEGY = "heimenergie";
   const PERIODS = [
     ["today", "Heute"], ["week", "Woche"],
@@ -56,6 +56,12 @@
     .editor-device summary { cursor:pointer; font-weight:600; }
     label { display:grid; gap:5px; font-size:13px; margin:10px 0; }
     .empty { padding:26px 12px; text-align:center; color:var(--secondary-text-color); }
+    .source { font-size:12px; color:var(--secondary-text-color); margin-bottom:10px; }
+    .device .meta { margin-top:7px; }
+    .minor { font-size:12px; opacity:.86; }
+    .summary-heading { font-size:15px; font-weight:650; margin:14px 0 10px; }
+    .warn { border-left:3px solid var(--warning-color,#e6a23c); }
+    .device-icon { vertical-align:middle; margin-right:6px; color:var(--primary-color); }
     @media(min-width:720px) { .stats { grid-template-columns:repeat(4,minmax(0,1fr)); } .grid { grid-template-columns:repeat(3,minmax(0,1fr)); } }
     @media(max-width:360px) { .tile .value { font-size:19px; } .grid { gap:7px; } ha-card { padding:12px; } }
   `;
@@ -117,6 +123,58 @@
   const displayName = (d) => d.name || d.power || "Unbenannt";
   const safeDevices = (cfg) => Array.isArray(cfg.devices) ? cfg.devices.filter((d) => d && typeof d === "object") : [];
 
+  // The catalog contains only entity references and display metadata. Values are
+  // always read from the currently authenticated Home Assistant state object;
+  // the public JavaScript contains no installation-specific device IDs.
+  const DEFAULT_CATALOG = "sensor.heimenergie_katalog";
+  const CONSUMER_ICONS = {
+    fridge:"mdi:fridge-outline", dishwasher:"mdi:dishwasher", washing_machine:"mdi:washing-machine",
+    vacuum:"mdi:robot-vacuum", printer:"mdi:printer", server:"mdi:server", television:"mdi:television",
+    other:"mdi:power-plug",
+  };
+  const consumerIcon = (d) => CONSUMER_ICONS[d.consumer_type] || CONSUMER_ICONS.other;
+  function loadSource(hass, cfg) {
+    if (cfg.source !== "manual") {
+      const entity = cfg.catalog_entity || DEFAULT_CATALOG;
+      const state = hass?.states?.[entity];
+      const attrs = state?.attributes || {};
+      if (Number(attrs.heimenergie_catalog_version) >= 1 && Array.isArray(attrs.devices)) {
+        return {
+          mode:"backend", entity, devices:attrs.devices.filter(d=>d && typeof d === "object"),
+          fixed:attrs.fixed && typeof attrs.fixed === "object" ? attrs.fixed : {},
+          priceEntity:attrs.price_entity || "", priceFixed:attrs.price_fixed,
+          baseMonthly:attrs.base_monthly, archived:Number(attrs.archived_consumers)||0,
+        };
+      }
+    }
+    // Preserve manually configured v0.1.x dashboards as an explicit legacy mode
+    // or a safe fallback when the backend catalog is temporarily unavailable.
+    const devices=safeDevices(cfg);
+    return { mode:devices.length ? "manual" : "missing", devices, fixed:{}, archived:0 };
+  }
+  function effectivePrice(hass, cfg, source) {
+    if (source.mode === "backend") return tariff(hass,{
+      tariff_entity:source.priceEntity,tariff_fixed:source.priceFixed,
+    });
+    return tariff(hass,cfg);
+  }
+  function fixedTotals(hass, source, period, values) {
+    const energy=sumKnown(values,"energy"), variable=sumKnown(values,"cost");
+    if(source.mode!=="backend") return { energy:energy.value,variable:variable.value,base:null,combined:null,energyCoverage:energy,costCoverage:variable };
+    const f=source.fixed;
+    const en=numeric(hass,f[`total_energy_${period}`]);
+    const co=numeric(hass,f[`total_cost_${period}`]);
+    const base=numeric(hass,f[`base_${period}`]);
+    const included=numeric(hass,f[`cost_incl_base_${period}`]);
+    return {
+      energy:en!==null?en:energy.value,
+      variable:co!==null?co:variable.value,
+      base,
+      combined:included!==null?included:(base!==null && (co!==null || variable.value!==null)?base+(co!==null?co:variable.value):null),
+      energyCoverage:energy,costCoverage:variable,
+    };
+  }
+
   class HeimCard extends HTMLElement {
     constructor() {
       super(); this.attachShadow({mode:"open"}); this._config = {}; this._hass = null;
@@ -124,9 +182,19 @@
       this.shadowRoot.addEventListener("click", (e) => this.onClick(e));
       this.shadowRoot.addEventListener("input", (e) => this.onInput(e));
       this.shadowRoot.addEventListener("change", (e) => this.onChange(e));
+      this.shadowRoot.addEventListener("focusout", () => {
+        if (this._pendingHassRender) { this._pendingHassRender=false; this.render(); }
+      });
     }
     setConfig(cfg) { this._config = cfg || {}; this.render(); }
-    set hass(hass) { this._hass = hass; this.render(); }
+    set hass(hass) {
+      this._hass = hass;
+      // Do not destroy the focused search input on Android while HA pushes updates.
+      if (this.shadowRoot?.activeElement?.matches?.("input,select")) {
+        this._pendingHassRender=true; return;
+      }
+      this.render();
+    }
     getCardSize() { return 8; }
     getLayoutOptions() { return { grid_columns:4, grid_rows:8 }; }
     onClick(e) {
@@ -146,21 +214,33 @@
     onChange(e) { if (e.target.dataset.action === "sort") { this._sort = e.target.value; this.render(); } }
     render() {
       if (!this.shadowRoot || !this._hass) return;
-      const cfg = this._config; const hass = this._hass; const price = tariff(hass,cfg);
-      const devices = safeDevices(cfg); const values = devices.map((d) => ({ device:d, ...measure(hass,d,this._period,price) }));
-      const body = this.view(values,devices,price);
-      this.shadowRoot.innerHTML = style()+`<ha-card>${body}<div class="hr"></div><div class="small muted">HeimEnergie v${VERSION} · ${devices.length} ${devices.length===1?"Gerät":"Geräte"} · Nur überwachte Geräte</div></ha-card>`;
+      const cfg=this._config, hass=this._hass;
+      const source=loadSource(hass,cfg);
+      this._source=source;
+      const price=effectivePrice(hass,cfg,source);
+      const devices=source.devices;
+      const values=devices.map(d=>({device:d,...measure(hass,d,this._period,price)}));
+      const body=source.mode==="missing"
+        ? `<div class="head"><h2>⚡ HeimEnergie</h2></div><div class="note warn">Kein HeimEnergie-Katalog gefunden. Bitte zuerst die HeimEnergie-Integration unter Einstellungen → Geräte & Dienste einrichten. Der Standard-Katalog ist ${esc(cfg.catalog_entity||DEFAULT_CATALOG)}.</div>`
+        : this.view(values,devices,price);
+      const sourceLabel=source.mode==="backend" ? "Automatisch aus HeimEnergie-Integration" : source.mode==="manual" ? "Manuelle Alt-Konfiguration" : "Keine Datenquelle";
+      this.shadowRoot.innerHTML=style()+`<ha-card>${body}<div class="hr"></div><div class="small muted">HeimEnergie v${VERSION} · ${devices.length} ${devices.length===1?"Gerät":"Geräte"} · ${sourceLabel} · Nur überwachte Geräte</div></ha-card>`;
     }
     periodTabs() { return `<div class="tabs" aria-label="Zeitraum">${PERIODS.map(([key,label])=>
       `<button data-action="period" data-value="${key}" aria-pressed="${this._period===key}">${label}</button>`).join("")}</div>`; }
     summary(values,price) {
-      const p=sumKnown(values,"power"), e=sumKnown(values,"energy"), c=sumKnown(values,"cost");
+      const p=sumKnown(values,"power"), totals=fixedTotals(this._hass,this._source,this._period,values);
+      const e=totals.energyCoverage,c=totals.costCoverage;
+      const periodLabel=PERIODS.find(x=>x[0]===this._period)?.[1]||"Zeitraum";
+      const baseBlock=this._source.mode==="backend" ? `<div class="tile"><div class="key">Grundpreis · ${esc(periodLabel)}</div><div class="value">${euro(totals.base)}</div><div class="sub">Einmal je Tarif, nicht pro Gerät</div></div>
+        <div class="tile"><div class="key">Erfasste Kosten inkl. Grundpreis</div><div class="value">${euro(totals.combined)}</div><div class="sub">Keine vollständige Haushaltsrechnung</div></div>` : "";
       return `<div class="stats">
         <div class="tile"><div class="key">Momentanleistung</div><div class="value">${watts(p.value)}</div><div class="sub">${p.known}/${p.total} Geräte</div></div>
-        <div class="tile"><div class="key">Verbrauch · ${esc(PERIODS.find(x=>x[0]===this._period)?.[1])}</div><div class="value">${kwh(e.value)}</div><div class="sub">${e.known}/${e.total} Geräte</div></div>
-        <div class="tile"><div class="key">Kosten · ${esc(PERIODS.find(x=>x[0]===this._period)?.[1])}</div><div class="value">${euro(c.value)}</div><div class="sub">${c.known}/${c.total} Geräte</div></div>
-        <div class="tile"><div class="key">Strompreis</div><div class="value">${price === null ? "—" : fmt(price,4)}</div><div class="sub">€/kWh</div></div>
-      </div>${p.known<p.total||e.known<e.total||c.known<c.total?`<div class="note">Einige Werte fehlen. Summen berücksichtigen nur vorhandene Sensorwerte und sind möglicherweise unvollständig.</div>`:""}`;
+        <div class="tile"><div class="key">Verbrauch · ${esc(periodLabel)}</div><div class="value">${kwh(totals.energy)}</div><div class="sub">${e.known}/${e.total} Geräte</div></div>
+        <div class="tile"><div class="key">Verbrauchskosten · ${esc(periodLabel)}</div><div class="value">${euro(totals.variable)}</div><div class="sub">Ohne Grundpreis</div></div>
+        ${baseBlock}
+        <div class="tile"><div class="key">Arbeitspreis</div><div class="value">${price === null ? "—" : fmt(price,4)}</div><div class="sub">€/kWh</div></div>
+      </div>${p.known<p.total||e.known<e.total||c.known<c.total?`<div class="note warn">Einige Geräte liefern nicht alle Werte für diesen Zeitraum. Summen können unvollständig sein (${e.known}/${e.total} kWh, ${c.known}/${c.total} €).</div>`:""}`;
     }
     view(values,devices,price) { return ""; }
   }
@@ -168,10 +248,10 @@
   class HeimOverview extends HeimCard {
     view(values,devices,price) {
       const live = devices.map((d)=>({d,v:inWatts(this._hass,d.power)})).filter(x=>x.v!==null).sort((a,b)=>b.v-a.v).slice(0,5);
-      return `<div class="head"><h2>⚡ Energieübersicht</h2><span class="small muted">Live + Verlaufssensoren</span></div>
+      return `<div class="head"><h2>⚡ Energieübersicht</h2><span class="small muted">Live + Zeitraumwerte</span></div>
         ${this.periodTabs()}${this.summary(values,price)}
         <div class="head"><h2 style="font-size:17px">Aktuell größte Verbraucher</h2></div>
-        ${live.length ? `<div class="stack">${live.map(({d,v})=>`<div class="row tile"><span>${esc(displayName(d))}</span><strong>${watts(v)}</strong></div>`).join("")}</div>`:
+        ${live.length ? `<div class="stack">${live.map(({d,v})=>`<div class="row tile"><span>${icon(consumerIcon(d))} ${esc(displayName(d))}</span><strong>${watts(v)}</strong></div>`).join("")}</div>`:
         `<div class="empty">Noch keine verfügbaren Leistungssensoren konfiguriert.</div>`}`;
     }
   }
@@ -183,12 +263,12 @@
       else if (this._sort==="cost") sorted.sort((a,b)=>(b.cost??-Infinity)-(a.cost??-Infinity));
       else sorted.sort((a,b)=>displayName(a.device).localeCompare(displayName(b.device),"de"));
       const chosen = values.find((x)=>x.device.power===this._detail);
-      if (chosen && this._detail) return `<div class="head"><h2>${esc(displayName(chosen.device))}</h2><button data-action="back" class="device">← Alle Geräte</button></div>
+      if (chosen && this._detail) return `<div class="head"><h2>${icon(consumerIcon(chosen.device))} ${esc(displayName(chosen.device))}</h2><button data-action="back" class="device">← Alle Geräte</button></div>
         ${this.periodTabs()}<div class="stats">
         <div class="tile"><div class="key">Momentanleistung</div><div class="value">${watts(chosen.power)}</div></div>
         <div class="tile"><div class="key">Energie</div><div class="value">${kwh(chosen.energy)}</div></div>
         <div class="tile"><div class="key">Kosten</div><div class="value">${euro(chosen.cost)}</div></div>
-        </div><div class="note">Bei fehlenden Zeitraumwerten bitte in den Dashboard-Einstellungen passende Energie- oder Kostensensoren zuordnen. Die Detailhistorie folgt in einer späteren Version.</div>`;
+        </div><div class="note">${this._source.mode==="backend" ? `Messgerät: ${esc(chosen.device.meter_name||chosen.device.power||"—")}. Sensoren und Verbraucher verwaltest du unter Einstellungen → Geräte & Dienste → HeimEnergie.` : "Zeitraumsensoren können in der manuellen Dashboard-Konfiguration zugeordnet werden."} Die Detailhistorie folgt in einer späteren Version.</div>`;
       return `<div class="head"><h2>🔌 Geräte</h2><span class="small muted">${devices.length} eingerichtet</span></div>
         ${this.periodTabs()}
         <div class="actions"><input aria-label="Geräte suchen" data-action="search" placeholder="Geräte suchen…" value="${esc(this._search)}" style="flex:2;min-width:150px">
@@ -196,7 +276,7 @@
           ${[["name","Name"],["power","Leistung"],["cost","Kosten"]].map(([id,label])=>`<option value="${id}" ${this._sort===id?"selected":""}>${label}</option>`).join("")}
         </select></div>
         ${sorted.length ? `<div class="grid">${sorted.map((x)=>`<button class="device" data-action="detail" data-value="${esc(x.device.power||"")}">
-          <div class="name">${esc(displayName(x.device))}</div><div class="value">${watts(x.power)}</div>
+          <div class="name">${icon(consumerIcon(x.device))} ${esc(displayName(x.device))}</div><div class="value">${watts(x.power)}</div>
           <div class="small muted">${kwh(x.energy)}</div><div class="small muted">${euro(x.cost)}</div>
         </button>`).join("")}</div>` : `<div class="empty">Keine passenden Geräte gefunden.</div>`}`;
     }
@@ -204,23 +284,25 @@
 
   class HeimAnalysis extends HeimCard {
     view(values,devices,price) {
-      const costs=sumKnown(values,"cost"), energy=sumKnown(values,"energy");
-      const rows=values.filter((x)=>x.cost!==null||x.energy!==null).sort((a,b)=>(b.cost??-1)-(a.cost??-1));
-      const max=Math.max(0,...rows.map((x)=>x.cost??0));
+      const totals=fixedTotals(this._hass,this._source,this._period,values);
+      const rows=values.filter(x=>x.cost!==null||x.energy!==null).sort((a,b)=>(b.cost??-1)-(a.cost??-1));
+      const max=Math.max(0,...rows.map(x=>x.cost??0));
       return `<div class="head"><h2>📊 Auswertung</h2><span class="small muted">Erfasste Geräte</span></div>
         ${this.periodTabs()}
         <div class="stats">
-          <div class="tile"><div class="key">Gesamtverbrauch</div><div class="value">${kwh(energy.value)}</div><div class="sub">${energy.known}/${energy.total} Geräte</div></div>
-          <div class="tile"><div class="key">Gesamtkosten</div><div class="value">${euro(costs.value)}</div><div class="sub">${costs.known}/${costs.total} Geräte</div></div>
+          <div class="tile"><div class="key">Energie der überwachten Geräte</div><div class="value">${kwh(totals.energy)}</div><div class="sub">${totals.energyCoverage.known}/${devices.length} Geräte</div></div>
+          <div class="tile"><div class="key">Verbrauchskosten</div><div class="value">${euro(totals.variable)}</div><div class="sub">Ohne Grundpreis</div></div>
+          ${this._source.mode==="backend"?`<div class="tile"><div class="key">Grundpreis (einmalig)</div><div class="value">${euro(totals.base)}</div></div>
+            <div class="tile"><div class="key">Erfasste Kosten inkl. Grundpreis</div><div class="value">${euro(totals.combined)}</div></div>`:""}
         </div>
-        <div class="head"><h2 style="font-size:17px">Kosten je Gerät</h2></div>
-        ${rows.length?`<div class="stack">${rows.map((x)=>`<div class="tile">
-          <div class="row"><strong>${esc(displayName(x.device))}</strong><span>${euro(x.cost)}</span></div>
+        <div class="head"><h2 style="font-size:17px">Verbrauchskosten je Gerät</h2></div>
+        ${rows.length?`<div class="stack">${rows.map(x=>`<div class="tile">
+          <div class="row"><strong>${icon(consumerIcon(x.device))} ${esc(displayName(x.device))}</strong><span>${euro(x.cost)}</span></div>
           <div class="bar"><span style="width:${x.cost===null||max===0?0:Math.max(0,Math.min(100,(x.cost/max)*100))}%"></span></div>
           <div class="small muted">${kwh(x.energy)}</div>
-        </div>`).join("")}</div>`:`<div class="empty">Für diesen Zeitraum sind noch keine geeigneten Daten zugeordnet.</div>`}
-        ${noteCoverage(costs,"Kosten")}${noteCoverage(energy,"Energie")}
-        <div class="note">Tages-, Wochen-, Monats- und Jahreswerte werden nicht geschätzt. Die Woche bleibt leer, solange keine passenden Wochensensoren zugeordnet sind. Kosten können aus kWh × Strompreis berechnet werden.</div>`;
+        </div>`).join("")}</div>`:`<div class="empty">Für diesen Zeitraum sind noch keine geeigneten Daten vorhanden.</div>`}
+        ${noteCoverage(totals.costCoverage,"Kosten")}${noteCoverage(totals.energyCoverage,"Energie")}
+        <div class="note">Der Grundpreis wird nur einmal zum Tarif addiert, nicht auf einzelne Verbraucher verteilt. Ohne Netzbezugszähler sind die Werte keine vollständige Haushaltsstromrechnung.</div>`;
     }
   }
 
@@ -250,7 +332,7 @@
 
   class HeimEditor extends HTMLElement {
     constructor() {
-      super(); this.attachShadow({mode:"open"}); this._config={type:`custom:${STRATEGY}`,devices:[],tariff_fixed:""};
+      super(); this.attachShadow({mode:"open"}); this._config={type:`custom:${STRATEGY}`,devices:[],tariff_fixed:"",source:"auto",catalog_entity:DEFAULT_CATALOG};
       this._hass=null;
       this._rendered=false;
       this.shadowRoot.addEventListener("click",(e)=>this.onClick(e));
@@ -307,6 +389,7 @@
         if (!dev) return;
         dev[field]=el.value;
       } else this._config[field]=el.value;
+      if (field==="source") { this.updated(true); return; }
       if (field==="name") {
         const summary = el.closest("details.editor-device")?.querySelector("summary");
         if (summary) summary.textContent=el.value||"Unbenannt";
@@ -322,27 +405,39 @@
         .sort((a,b)=>a[0].localeCompare(b[0]));
       const expanded = [...this.shadowRoot.querySelectorAll("details.editor-device[open]")]
         .map((el) => Number(el.dataset.index));
+      const catalogs=Object.entries(hass?.states||{}).filter(([id,s])=>
+        Number(s.attributes?.heimenergie_catalog_version)>=1 && Array.isArray(s.attributes?.devices));
+      const manual=cfg.source==="manual";
+      const catalogId=cfg.catalog_entity||DEFAULT_CATALOG;
+      const catalogFound=!!hass?.states?.[catalogId]?.attributes?.heimenergie_catalog_version;
       this.shadowRoot.innerHTML=style()+`<ha-card>
         <div class="head"><h2>⚡ HeimEnergie einrichten</h2></div>
-        <div class="note">Keine YAML-Datei erforderlich. Bitte Gerätenamen und Leistungssensoren wählen. Energiesensoren für die gewünschten Zeiträume zuordnen; Kostensensoren sind optional.</div>
-        <label>Strompreis-Entität (optional)
-          <select data-field="tariff_entity">${pickOptions(prices,cfg.tariff_entity)}</select>
+        <label>Datenquelle
+          <select data-field="source">
+            <option value="auto" ${!manual?"selected":""}>Automatisch: HeimEnergie Integration</option>
+            <option value="manual" ${manual?"selected":""}>Manuell: bisherige Sensorzuordnung (Legacy)</option>
+          </select>
         </label>
-        <label>Fester Ersatz-Strompreis (€/kWh)
-          <input data-field="tariff_fixed" type="number" min="0" step="0.0001" value="${esc(cfg.tariff_fixed??"")}">
-        </label>
-        <div class="head"><h2 style="font-size:17px">Geräte (${devices.length})</h2></div>
-        <div class="actions"><button data-action="scan">Leistungssensoren erkennen</button><button data-action="add">+ Gerät hinzufügen</button></div>
-        <div class="small muted">Automatische Erkennung ergänzt Kandidaten – vor dem Speichern bitte kontrollieren und nicht benötigte entfernen.</div>
-        ${devices.map((d,i)=>`<details class="editor-device" data-index="${i}" ${expanded.includes(i)?"open":""}>
-          <summary>${esc(displayName(d))}</summary>
-          <label>Anzeigename<input data-field="name" data-index="${i}" value="${esc(d.name||"")}"></label>
-          ${ENTITY_FIELDS.map(([field,label])=>`<label>${label}<select data-field="${field}" data-index="${i}">
-            ${pickOptions(eligibleEntities(hass,field),d[field]||"")}</select></label>`).join("")}
-          <div class="actions"><button data-action="remove" data-index="${i}">Gerät entfernen</button></div>
-        </details>`).join("")}
-        ${devices.length?"":`<div class="empty">Bitte mindestens ein Gerät hinzufügen.</div>`}
-        <div class="note">Speichern erfolgt über den Home-Assistant-Dialog. Ein fehlender Zeitraum bleibt leer, statt einen ungenauen Wert zu erfinden.</div>
+        ${manual ? `<div class="note">Manueller Modus für ältere Installationen ohne HeimEnergie Backend. Für die automatische Geräteverwaltung bitte „Automatisch“ wählen.</div>
+          <label>Strompreis-Entität (optional)<select data-field="tariff_entity">${pickOptions(prices,cfg.tariff_entity)}</select></label>
+          <label>Fester Ersatz-Strompreis (€/kWh)<input data-field="tariff_fixed" type="number" min="0" step="0.0001" value="${esc(cfg.tariff_fixed??"")}"></label>
+          <div class="head"><h2 style="font-size:17px">Geräte (${devices.length})</h2></div>
+          <div class="actions"><button data-action="scan">Leistungssensoren erkennen</button><button data-action="add">+ Gerät hinzufügen</button></div>
+          ${devices.map((d,i)=>`<details class="editor-device" data-index="${i}" ${expanded.includes(i)?"open":""}>
+            <summary>${esc(displayName(d))}</summary>
+            <label>Anzeigename<input data-field="name" data-index="${i}" value="${esc(d.name||"")}"></label>
+            ${ENTITY_FIELDS.map(([field,label])=>`<label>${label}<select data-field="${field}" data-index="${i}">${pickOptions(eligibleEntities(hass,field),d[field]||"")}</select></label>`).join("")}
+            <div class="actions"><button data-action="remove" data-index="${i}">Gerät entfernen</button></div>
+          </details>`).join("")}
+          ${devices.length?"":`<div class="empty">Bitte mindestens ein Gerät hinzufügen.</div>`}` : `
+          <div class="note">Verbraucher, Sensoren und Stromtarif werden ausschließlich in der HeimEnergie-Integration unter Einstellungen → Geräte & Dienste verwaltet. Hier ist keine zweite Gerätezuordnung erforderlich.</div>
+          <label>HeimEnergie-Katalog
+            <select data-field="catalog_entity">${pickOptions(catalogs,catalogId)}</select>
+          </label>
+          <div class="note ${catalogFound?"":"warn"}">${catalogFound
+            ? `Katalog erkannt: ${esc(hass.states[catalogId].attributes.devices.length)} Geräte. Alle Dashboard-Ansichten aktualisieren sich automatisch bei Änderungen.`
+            : `Noch kein Katalog unter ${esc(catalogId)} gefunden. Bitte HeimEnergie-Integration einrichten oder eine andere Katalog-Entität wählen.`}</div>`}
+        <div class="small muted">Die Auswahl wird im Home-Assistant-Dashboard gespeichert. Keine persönlichen Gerätezuordnungen werden nach GitHub übertragen.</div>
       </ha-card>`;
       this._rendered = true;
     }
@@ -355,7 +450,10 @@
     static getConfigElement() { return document.createElement("heimenergie-strategy-editor"); }
     static async generate(config) {
       const devices=safeDevices(config);
-      const shared={devices,tariff_entity:config.tariff_entity||"",tariff_fixed:config.tariff_fixed??""};
+      const shared={
+        source:config.source||"auto",catalog_entity:config.catalog_entity||DEFAULT_CATALOG,
+        devices,tariff_entity:config.tariff_entity||"",tariff_fixed:config.tariff_fixed??"",
+      };
       return { title:"HeimEnergie", views:[
         { title:"Übersicht",path:"uebersicht",icon:"mdi:view-dashboard",type:"panel",cards:[{type:"custom:heimenergie-overview",...shared}] },
         { title:"Geräte",path:"geraete",icon:"mdi:power-plug",type:"panel",cards:[{type:"custom:heimenergie-devices",...shared}] },
@@ -376,7 +474,7 @@
   if(!window.customStrategies.some(x=>x.type===STRATEGY && x.strategyType==="dashboard")) {
     window.customStrategies.push({
       type:STRATEGY,strategyType:"dashboard",name:"HeimEnergie",
-      description:"Modulares Energiedashboard ohne Netzbezugszähler – Leistung, kWh und Kosten",
+      description:"Automatisches HeimEnergie-Dashboard – 8 oder mehr Geräte, kWh, Kosten und Grundpreis",
     });
   }
   console.info(`[HeimEnergie] v${VERSION} ready`);

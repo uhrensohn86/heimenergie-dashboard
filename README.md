@@ -1,94 +1,76 @@
 # HeimEnergie Dashboard
 
-**Version 0.1.2 – experimenteller Prototyp** · Sprache: Deutsch · MIT-Lizenz
+**Version 0.3.0-alpha** · Deutsch · MIT-Lizenz · Home Assistant Community Dashboard
 
-Ein modulares, mobiles Home-Assistant-Energiedashboard **ohne Pflicht zum Netzbezugszähler**, ohne zusätzlichen Server und ohne eigene Datenbank. HeimEnergie liest ausschließlich bereits vorhandene Home-Assistant-Entitäten und ändert keine Sensoren, Zähler oder Konfiguration.
+HeimEnergie ist eine mobile Energieoberfläche mit **Übersicht**, **Geräten** und **Auswertung**. In Verbindung mit der **HeimEnergie Integration v0.2.4 oder neuer** übernimmt es automatisch Geräte, Leistungs-, Energie- und Kostensensoren aus dem lokalen Katalog. **Ein Netzbezugszähler ist nicht erforderlich.**
 
-## Erste Funktionen
+## Neu in v0.3.0-alpha
 
-- Drei automatisch angelegte Ansichten: **Übersicht**, **Geräte** und **Auswertung**.
-- Momentane **Gesamtleistung** als Summe konfigurierter Smart-Plug-Leistungssensoren (W).
-- Energieverbrauch und Stromkosten in derselben Ansicht (kWh und €).
-- Zeitraumauswahl **Heute / Woche / Monat / Jahr**. Ein Zeitraum wird nur angezeigt, wenn die entsprechenden Energie- oder Kostensensoren existieren.
-- Sortieren, Suchen und Gerätedetails; mobiloptimiert.
-- Visueller Einrichtungsdialog mit Geräteverwaltung und Sensorzuordnung.
-- Strompreis aus einem `input_number`/Sensor oder fester Ersatzpreis; Kosten können aus kWh × Preis berechnet werden.
-- Keine vorgegebenen Geräte oder privaten Entitäts-IDs: Sensoren werden nur lokal in Home Assistant ausgewählt.
-- Keine npm-Pakete, keine externe API, keine Backend-Integration.
-
-### Grenzen dieser ersten Version
-
-- **Woche** funktioniert, sobald dafür passende kWh-/€-Sensoren zugeordnet sind. Die Version liest noch keine Wochenwerte direkt aus der Home-Assistant-Langzeitstatistik und legt auch keine Utility Meter an.
-- Tag/Monat/Jahr benötigen ebenfalls entsprechende Sensoren. Nicht verfügbare Daten erscheinen als `—`, nicht als fiktive `0`.
-- Der aktuelle Preis wird zur Berechnung fehlender Kosten verwendet; **dynamische historische Tarife werden noch nicht berücksichtigt**.
-- Die Summe ist nur die Summe **überwachter Geräte**, kein vollständiger Hausverbrauch. Fehlende Sensoren werden als *Teilsumme* kenntlich gemacht.
-- Keine historischen Kurven oder frei wählbaren Datumsintervalle in v0.1.2.
-- In Home Assistant auf Android getestet; für v0.1.2 steht die Bestätigung des behobenen Editor-Fokusproblems noch aus.
+- **Keine doppelte Gerätekonfiguration:** Liest standardmäßig `sensor.heimenergie_katalog` aus der HeimEnergie Integration. Geänderte oder neue Verbraucher werden bei Home-Assistant-Zustandsaktualisierungen übernommen, ohne das Dashboard neu zu generieren.
+- **Übersicht:** Summe der aktuellen Leistung (W) sowie kWh, Verbrauchskosten, Grundpreis, erfasste Kosten inkl. Grundpreis und Arbeitspreis.
+- **Geräte:** Suche, Sortierung, Gerätekarten und Detailansicht. Der Verbrauchername wird verwendet; das physische Messgerät wird in der Detailansicht gezeigt.
+- **Auswertung:** Gerätevergleich mit kWh und variablen Kosten sowie separater Grundpreis für Heute, Woche, Monat und Jahr.
+- **Tarifquelle:** Preis- und Fixkostensensoren stammen aus dem Katalog, nicht aus einer zweiten Dashboard-Einstellung.
+- **Bestands-Dashboards:** Die manuelle Konfiguration von v0.1.x bleibt als auswählbarer Legacy-Modus erhalten. Wenn der Katalog vorübergehend fehlt, kann ein bestehendes manuell eingerichtetes Dashboard seine bisherigen Daten anzeigen.
+- Keine eigenen Backend-Schreibzugriffe: Das Dashboard ist eine reine Oberfläche. Sensoren und ihre Zuordnungen werden in der Home-Assistant-Integration verwaltet.
 
 ## Voraussetzungen
 
-- Home Assistant **2026.5 oder neuer** (Custom Dashboard Strategies im Dashboard-Auswahldialog)
-- Zugriff auf `Einstellungen → Dashboards` als Admin
-- Vorhandene Leistungs- und idealerweise kWh-/Kostensensoren
+- Home Assistant 2026.5 oder neuer für die Community-Dashboard-Strategie
+- HeimEnergie Integration v0.2.4 oder neuer (empfohlen), installiert und eingerichtet
+- HeimEnergie-Katalog mit Attribut `heimenergie_catalog_version: 1` und `devices` (normalerweise `sensor.heimenergie_katalog`)
+- Geeignete Leistungssensoren; die Integration stellt Zeitraumzähler und Kostensensoren bereit bzw. verweist auf vorhandene
 
-## Installation über GitHub + HACS (empfohlen nach Veröffentlichung des Repos)
+Ohne Backend bleibt die manuelle Konfiguration von v0.1.x nutzbar; eine neue Installation zeigt einen entsprechenden Hinweis, solange kein gültiger Katalog verfügbar ist.
 
-1. Dieses Projekt als eigenes GitHub-Repository mit dem Namen `heimenergie-dashboard` veröffentlichen. `dist/heimenergie-dashboard.js` und `hacs.json` **müssen im Repository** enthalten sein.
-2. Home Assistant → **HACS → ⋮ → Benutzerdefinierte Repositories** → URL des eigenen GitHub-Repositories → Kategorie **Dashboard**.
-3. HeimEnergie aus HACS herunterladen. Die JavaScript-Ressource wird bei normaler Ressourcenverwaltung automatisch angelegt.
-4. Home-Assistant-App/Browser vollständig neu laden.
-5. **Einstellungen → Dashboards → Dashboard hinzufügen** → unter *Community-Dashboards* **HeimEnergie** auswählen.
-6. Im Einrichtungsdialog **„Leistungssensoren erkennen“** verwenden oder die Geräte manuell hinzufügen und die Sensoren auswählen.
-7. Dashboard erstellen. Das bisherige Strom-Dashboard und `configuration.yaml` bleiben unverändert.
+## Installation und Aktualisierung mit HACS
 
-Der neue offizielle Home-Assistant-Marketplace ist für die gleiche Frontend-Modulstruktur vorgesehen; siehe [Entwicklerdokumentation](https://contributors.home-assistant.io/marketplace/guides/dashboard/).
+**Neue Installation**
+1. **HACS → Benutzerdefinierte Repositories:** Das öffentliche GitHub-Repository `heimenergie-dashboard` als Kategorie **Dashboard** hinzufügen.
+2. **HeimEnergie Dashboard** in HACS herunterladen.
+3. HA-App neu laden.
+4. **Einstellungen → Dashboards → Dashboard hinzufügen → Community-Dashboards → HeimEnergie**.
+5. Datenquelle **„Automatisch: HeimEnergie Integration“** auswählen. Bei Bedarf den richtigen Katalog auswählen und speichern.
 
-## Manuelle Installation ohne GitHub
+**Update von v0.1.2**
+1. Dashboard-Konfiguration optional vorab über Home Assistant sichern.
+2. In HACS **HeimEnergie Dashboard → ⋮ → Informationen aktualisieren / Erneut herunterladen**.
+3. App/Browser neu laden; falls nötig den Frontend-Cache aktualisieren.
+4. Dein vorhandenes HeimEnergie-Dashboard weiterhin öffnen. **Es ist keine erneute manuelle Gerätezuordnung nötig**, wenn der Katalog gefunden wird. Im Dashboard-Konfigurationsdialog ist „Automatisch“ die Standardeinstellung, auch für ältere Konfigurationen ohne `source`-Eintrag.
 
-1. Die Datei `dist/heimenergie-dashboard.js` nach `/config/www/heimenergie-dashboard.js` kopieren (bei neu angelegtem `/config/www` einmal HA neu starten).
-2. Home Assistant → **Einstellungen → Dashboards → ⋮ → Ressourcen** → Ressource hinzufügen:
-   - URL: `/local/heimenergie-dashboard.js?v=0.1.2`
-   - Ressourcentyp: `JavaScript-Modul`
-3. Browser/App neu laden; **Dashboard hinzufügen → Community-Dashboards → HeimEnergie**.
+Die bestehende Integration und ihre Zähler **nicht entfernen**: Dieses Update betrifft ausschließlich die Dashboard-Dateien.
 
-Die JavaScript-Datei unter `/local/` wird ohne HA-Authentifizierung ausgeliefert. Sie enthält **keine vorgegebenen privaten Gerätezuordnungen oder Zugangsdaten**. Die Zuordnung wird ausschließlich im jeweiligen Home-Assistant-Dashboard gespeichert; wer Zugang zum Dashboard hat, kann sie dort lesen.
+## Anzeige- und Berechnungsregeln
 
-## Strompreis und Daten
-
-Ein Strompreis-Helfer ist optional. Im Einrichtungsdialog kann ein bereits vorhandener Preis-Sensor oder `input_number` ausgewählt werden. Alternativ lässt sich ein fester Preis in €/kWh eintragen. **Es ist weder ein Tarif noch ein Gerät vorbelegt.** Energie in kWh/Wh/MWh und Leistung in W/kW werden entsprechend umgerechnet.
-
-**Datenschutz:** Persönliche Gerätezuordnungen werden nicht in den Quellcode geschrieben. Öffentliche Projektdateien, Dokumentation und Tests enthalten nur neutrale, fiktive Beispiele. Die lokale Konfiguration bleibt in Home Assistant. Nicht zum Teilen bestimmt sind Exportdateien mit echten Dashboard- oder Sensorzuordnungen.
-
-## Änderungen in v0.1.2
-
-- **Android-Editor:** Der Eingabefokus und geöffnete Auswahlfelder bleiben bei laufenden Home-Assistant-Zustandsaktualisierungen erhalten.
-- **Sensorzuordnung:** Nach Auswahl eines Sensors wird nicht mehr der gesamte Editor neu aufgebaut.
-- **Bestehende Einstellungen:** Unverändert; kein neues Dashboard und keine neue Konfiguration erforderlich.
-- Die automatisch erkannte Gerätezahl oder fehlende Wochenwerte sind mit diesem Wartungsupdate noch nicht behoben.
-
-## Entwicklung
-
-Die gesamte Logik liegt bewusst zunächst in **einer** kleinen JavaScript-Datei unter `dist/`. Es gibt keine Build-Abhängigkeiten. Spätere Versionen können auf mehrere Module aufgeteilt werden. Die Widgets verwenden Shadow DOM und Home-Assistant-Themevariablen.
-
-Tests (Node.js, kein npm erforderlich):
-
-```sh
-node --check dist/heimenergie-dashboard.js
-node tests/smoke.cjs
-python tests/browser_smoke.py  # optional: benötigt Playwright + Chromium
-```
-
-Offene nächste Punkte: reale HA-Installation prüfen, verbesserte dynamische Sensorzuordnung, wöchentliche Werte aus HA-Statistiken statt zusätzlichen Sensoren, Langzeitdiagramme, UI-Politur, Mehrsprachigkeit (DE/EN), Gerätegruppen und Import historischer Termumeter-Zählerstände.
+- Die Hauptdatenquelle sind `attributes.devices` und `attributes.fixed` des lokalen Katalogs. Sensorwerte werden zur Laufzeit direkt aus den Home-Assistant-Zuständen gelesen.
+- Der Grundpreis wird **einmal pro Zeitraum** aus `fixed.base_<period>` angezeigt. Er wird **nicht** zu jeder Gerätekarte addiert. Das Feld `fixed.cost_incl_base_<period>` liefert die vom Backend berechnete Summe der erfassten variablen Kosten plus Grundpreis.
+- Kosten je Gerät sind **Verbrauchskosten**, ohne anteiligen Grundpreis. Falls der Kostensensor fehlt, wird – nur sofern ein Energiewert und ein aktueller Arbeitspreis vorliegen – ein aktueller Näherungswert aus kWh × Preis angezeigt. Dies ersetzt keine historische Tarifabrechnung.
+- Nicht vorhandene bzw. nicht verfügbare Werte erscheinen als **—**, nicht als angenommene 0. Eine unvollständige Geräteabdeckung wird kenntlich gemacht.
+- Die Gesamtsumme berücksichtigt **nur die überwachten Geräte**. Ohne Netzbezugszähler ist sie keine komplette Stromrechnung für den Haushalt.
+- Historische Kurven, beliebige Zeitfenster und die Zuordnung historischer Werte bei umgesteckten Messgeräten folgen in späteren Versionen.
 
 ## Datenschutz
 
-Siehe [PRIVACY.md](PRIVACY.md). Das Projekt enthält keine vorgegebenen Geräteprofile. Verwende keine echten Entitäts-IDs, Screenshots oder Konfigurations-Exporte in öffentlichen Commits.
+Im Quellcode sind **keine privaten Gerätenamen, individuellen Entitäts-IDs, lokalen IP-Adressen, Strompreise oder Zugangsdaten** hinterlegt. Die acht oder mehr Geräte werden ausschließlich aus der *lokalen* Home-Assistant-Konfiguration gelesen. Die Daten werden nicht an GitHub oder externe Dienste gesendet. Bitte niemals persönliche Dashboard-Exporte, `.storage`-Dateien oder Screenshots mit vertraulichen Angaben committen. Siehe [PRIVACY.md](PRIVACY.md).
 
-## Quellen / Lizenz
+## Entwicklung und Tests
 
-Dieses Projekt enthält **keinen kopierten Drittanbieter-Code**. Es nutzt die öffentlich dokumentierte Home-Assistant-Dashboard-Strategie-API:
-- https://contributors.home-assistant.io/frontend/custom-ui/strategy/
-- https://contributors.home-assistant.io/frontend/custom-ui/resources/
-- https://contributors.home-assistant.io/marketplace/guides/dashboard/
+Ein kleines eigenständiges JavaScript-Modul liegt unter `dist/heimenergie-dashboard.js`. Keine npm-Abhängigkeiten, kein zusätzlicher Build-Prozess.
 
-Copyright © 2026 HeimEnergie contributors. MIT-Lizenz siehe `LICENSE`.
+```bash
+node --check dist/heimenergie-dashboard.js
+node tests/smoke.cjs
+```
+
+Ergänzende lokale Chromium-Tests für Entwicklungssysteme mit Playwright:
+
+```bash
+python tests/browser_smoke.py
+python tests/catalog_browser.py
+```
+
+Das Backend-Repository ist separat: https://github.com/uhrensohn86/heimenergie-integration
+
+## Lizenz und Grundlagen
+
+MIT-Lizenz, siehe [LICENSE](LICENSE). Kein kopierter Drittanbieter-Code. API-Grundlage: https://contributors.home-assistant.io/frontend/custom-ui/strategy/

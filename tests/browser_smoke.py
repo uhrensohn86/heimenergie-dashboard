@@ -15,7 +15,7 @@ with sync_playwright() as p:
       };
       window.fakeHass={states};
       const el=document.createElement('heimenergie-strategy-editor');
-      el.setConfig({type:'custom:heimenergie',devices:[]}); el.hass=window.fakeHass;
+      el.setConfig({type:'custom:heimenergie',source:'manual',devices:[]}); el.hass=window.fakeHass;
       document.querySelector('#demo').appendChild(el);
     }''')
     page.locator('heimenergie-strategy-editor').locator('button[data-action="scan"]').click()
