@@ -1,5 +1,10 @@
 # Änderungsprotokoll
 
+## 0.4.0-alpha.4 – Diagrammfarbe korrigiert
+
+- Gemeinsame Linienfarbe und transparente Füllung für Geräte- und Detailkurven.
+- Außenabstand des Detaildiagramms korrigiert.
+
 ## 0.4.0-alpha.3 – Leistung im Gerätedetail
 
 - Größerer 12-Stunden-Verlauf mit Watt-Skala und Uhrzeiten in der HA-Zeitzone.

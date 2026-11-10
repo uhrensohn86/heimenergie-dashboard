@@ -1,9 +1,9 @@
-/* HeimEnergie Dashboard - v0.4.0-alpha.3 (MIT). No external dependencies. */
+/* HeimEnergie Dashboard - v0.4.0-alpha.4 (MIT). No external dependencies. */
 (() => {
   "use strict";
   const HISTORY_HOURS = 12;
   const HISTORY_WINDOW_MS = HISTORY_HOURS * 60 * 60 * 1000;
-  const VERSION = "0.4.0-alpha.3";
+  const VERSION = "0.4.0-alpha.4";
   const STRATEGY = "heimenergie";
   const PERIODS = [
     ["today", "Heute"], ["week", "Woche"],
@@ -44,10 +44,10 @@
     .device-link { position:absolute; top:6px; right:6px; z-index:1; width:34px; height:34px; display:grid; place-items:center; border:1px solid transparent; background:var(--ha-card-background,var(--card-background-color)); border-radius:10px; color:var(--secondary-text-color); cursor:pointer; }
     .device-link:hover,.device-link:focus-visible { color:var(--primary-color); border-color:var(--divider-color); }
     .device-main:hover { background:var(--secondary-background-color,rgba(127,127,127,.05)); }
-    .device .detail-history{margin:20px 0}.detail-history h3{font-size:16px;font-weight:500}.detail-chart{display:block;width:100%;max-height:360px}.detail-chart text{fill:var(--secondary-text-color);font-size:11px}.detail-chart .spark-path{vector-effect:non-scaling-stroke}
-    .spark-wrap { margin-top:8px; height:50px; }
+    .detail-history{margin:20px 0}.detail-history h3{font-size:16px;font-weight:500}.detail-chart{display:block;width:100%;max-height:360px}.detail-chart text{fill:var(--secondary-text-color);font-size:11px}.detail-chart .spark-path{vector-effect:non-scaling-stroke}
+    .device .spark-wrap { margin-top:8px; height:50px; }
     .device .spark { display:block; width:100%; height:43px; overflow:visible; }
-    .device .spark-path { fill:none; stroke:var(--accent-color,var(--primary-color)); stroke-width:2.4; stroke-linejoin:round; stroke-linecap:round; vector-effect:non-scaling-stroke; }
+    .spark-path { fill:none; stroke:var(--accent-color,var(--primary-color)); stroke-width:2.4; stroke-linejoin:round; stroke-linecap:round; vector-effect:non-scaling-stroke; }
     .device .spark-empty { height:43px; display:flex; align-items:center; color:var(--secondary-text-color); font-size:11px; }
     .device .spark-label { color:var(--secondary-text-color); font-size:10px; }
     .device .name { padding-right:30px; }

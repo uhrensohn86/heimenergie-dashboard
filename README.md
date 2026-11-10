@@ -1,10 +1,14 @@
 # HeimEnergie Dashboard
 
-**Version 0.4.0-alpha.3** · Deutsch · MIT-Lizenz · Home Assistant Community Dashboard
+**Version 0.4.0-alpha.4** · Deutsch · MIT-Lizenz · Home Assistant Community Dashboard
 
 HeimEnergie ist eine mobile Energieoberfläche mit **Übersicht**, **Geräten** und **Auswertung**. In Verbindung mit der **HeimEnergie Integration v0.2.5 oder neuer** übernimmt es automatisch Geräte, Leistungs-, Energie- und Kostensensoren aus dem lokalen Katalog. **Ein Netzbezugszähler ist nicht erforderlich.**
 
-## Neu in v0.4.0-alpha.3
+## Neu in v0.4.0-alpha.4
+
+Die Detailkurve verwendet jetzt dieselbe Theme-Akzentfarbe wie die Gerätekurven und wird ohne Flächenfüllung gezeichnet.
+
+## Detailansicht
 
 Ein Tipp auf eine Gerätekarte öffnet die Detailansicht mit einem größeren 12-Stunden-Leistungsdiagramm. Die linke Skala zeigt Watt, die Zeitachse verwendet die in Home Assistant eingestellte Zeitzone. Fehlende Daten und Abruffehler werden angezeigt.
 
@@ -46,9 +50,9 @@ Ohne Backend bleibt die manuelle Konfiguration von v0.1.x nutzbar; eine neue Ins
 4. **Einstellungen → Dashboards → Dashboard hinzufügen → Community-Dashboards → HeimEnergie**.
 5. Datenquelle **„Automatisch: HeimEnergie Integration“** auswählen. Bei Bedarf den richtigen Katalog auswählen und speichern.
 
-**Update auf v0.4.0-alpha.3**
+**Update auf v0.4.0-alpha.4**
 
-Öffne HeimEnergie Dashboard in HACS bzw. im Marketplace. Aktiviere Vorabversionen, aktualisiere bei Bedarf die Repository-Informationen und lade `v0.4.0-alpha.3` herunter. Lade das Frontend neu und öffne die Geräteansicht. Vergleiche eine 12-Stunden-Kurve mit dem Verlauf desselben Leistungssensors in Home Assistant. Über die Versionsauswahl kannst du bei Bedarf wieder `v0.3.1-alpha` herunterladen.
+Öffne HeimEnergie Dashboard in HACS bzw. im Marketplace. Aktiviere Vorabversionen, aktualisiere bei Bedarf die Repository-Informationen und lade `v0.4.0-alpha.4` herunter. Lade das Frontend neu und öffne die Geräteansicht. Vergleiche eine 12-Stunden-Kurve mit dem Verlauf desselben Leistungssensors in Home Assistant. Über die Versionsauswahl kannst du bei Bedarf wieder `v0.3.1-alpha` herunterladen.
 
 **Update von v0.1.2**
 1. Dashboard-Konfiguration optional vorab über Home Assistant sichern.
@@ -97,4 +101,4 @@ MIT-Lizenz, siehe [LICENSE](LICENSE). Kein kopierter Drittanbieter-Code. API-Gru
 
 ## Release-Workflow
 
-Nach Tests und Commit über GitHub Actions den neuen Commit prüfen und ein **GitHub-Pre-Release** mit Tag `v0.4.0-alpha.3` veröffentlichen. In HACS für das Dashboard Vorabversionen aktivieren; HACS bietet dann die neue Version als Update an. Für den ersten Live-Test in Home Assistant die bestehende Dashboard-Konfiguration vorab sichern. Bei Problemen den vorherigen GitHub-Release `v0.3.1-alpha` über HACS erneut herunterladen.
+Nach Tests und Commit über GitHub Actions den neuen Commit prüfen und ein **GitHub-Pre-Release** mit Tag `v0.4.0-alpha.4` veröffentlichen. In HACS für das Dashboard Vorabversionen aktivieren; HACS bietet dann die neue Version als Update an. Für den ersten Live-Test in Home Assistant die bestehende Dashboard-Konfiguration vorab sichern. Bei Problemen den vorherigen GitHub-Release `v0.3.1-alpha` über HACS erneut herunterladen.
