@@ -1,5 +1,9 @@
 # Änderungsprotokoll
 
+## 0.4.0-alpha.2 – Zwölf Stunden je Gerätekurve
+
+- Der Recorder-Abruf und die Zeitachse der Gerätekarten umfassen jetzt die letzten zwölf Stunden. Die Zeitraumwahl für Energie und Kosten bleibt unabhängig davon.
+
 ## 0.4.0-alpha.1 – Geräteübersicht mit Verlauf und nativer Navigation
 
 - Individuelle 24-h-Leistungsverläufe direkt in jeder Gerätekarte (SVG, Recorder/WS, gemeinsam abgefragt, mobil optimiert)

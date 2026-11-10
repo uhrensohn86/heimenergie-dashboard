@@ -37,6 +37,9 @@ const flush=()=>new Promise(r=>setTimeout(r,0));
 (async()=>{
  const card=new Devices();card.setConfig({catalog_entity:'sensor.heimenergie_katalog'});card.hass=hass;
  await flush();await flush();
+ const request=messages.find(msg=>msg.type==="history/history_during_period");
+ assert.equal(Date.parse(request.end_time)-Date.parse(request.start_time),12*3600000);
+ assert.match(card.shadowRoot.innerHTML,/Leistung · letzte 12 h/);
  const html=card.shadowRoot.innerHTML;
  assert.match(html,/Demo Alpha/);assert.match(html,/55,0 W/);
  assert.match(html,/10,00 kWh/);assert.match(html,/3,08 €/);

@@ -1,7 +1,9 @@
-/* HeimEnergie Dashboard - v0.4.0-alpha.1 (MIT). No external dependencies. */
+/* HeimEnergie Dashboard - v0.4.0-alpha.2 (MIT). No external dependencies. */
 (() => {
   "use strict";
-  const VERSION = "0.4.0-alpha.1";
+  const HISTORY_HOURS = 12;
+  const HISTORY_WINDOW_MS = HISTORY_HOURS * 60 * 60 * 1000;
+  const VERSION = "0.4.0-alpha.2";
   const STRATEGY = "heimenergie";
   const PERIODS = [
     ["today", "Heute"], ["week", "Woche"],
@@ -223,7 +225,7 @@
     return result;
   }
   function sparkline(points, now=Date.now()) {
-    const start=now-24*60*60*1000;
+    const start=now-HISTORY_WINDOW_MS;
     const recent=(points||[]).filter(p=>p.t>=start && p.t<=now+60000);
     const valid=recent.filter(p=>p.v!==null);
     if(valid.length<2) return "";
@@ -376,7 +378,7 @@
       this._historyKey=key;this._historyRequestedAt=now;
       this._historyStatus="loading";this._historyPending=true;
       const seq=++this._historySeq;
-      const end=new Date(now),start=new Date(now-24*60*60*1000);
+      const end=new Date(now),start=new Date(now-HISTORY_WINDOW_MS);
       this._hass.callWS({
         type:"history/history_during_period",entity_ids:ids,
         start_time:start.toISOString(),end_time:end.toISOString(),
@@ -410,16 +412,16 @@
       const points=history.slice();
       // Recorder can supply the last known value from before the window.
       // Carry that known state to the visible left edge, without assuming zero.
-      const start=end-24*60*60*1000;
+      const start=end-HISTORY_WINDOW_MS;
       if(points.length && points[0].t<start && points[0].v!==null) points.unshift({t:start,v:points[0].v});
       // Add the current reading to the end of a real history series; never use it alone
       // to create an invented trend line.
       if(points.length && current!==null && end-points.at(-1).t>15000) points.push({t:end,v:current});
       const path=sparkline(points,end);
-      if(path) return `<div class="spark-wrap"><svg class="spark" viewBox="0 0 160 44" preserveAspectRatio="none" role="img" aria-label="Leistungsverlauf der letzten 24 Stunden">${path}</svg><div class="spark-label">Leistung · letzte 24 h</div></div>`;
+      if(path) return `<div class="spark-wrap"><svg class="spark" viewBox="0 0 160 44" preserveAspectRatio="none" role="img" aria-label="Leistungsverlauf der letzten ${HISTORY_HOURS} Stunden">${path}</svg><div class="spark-label">Leistung · letzte ${HISTORY_HOURS} h</div></div>`;
       const label=this._historyStatus==="loading"?"Verlauf wird geladen …":
         this._historyStatus==="error"?"Verlauf nicht verfügbar":"Keine Verlaufsdaten";
-      return `<div class="spark-wrap"><div class="spark-empty">${label}</div><div class="spark-label">Leistung · letzte 24 h</div></div>`;
+      return `<div class="spark-wrap"><div class="spark-empty">${label}</div><div class="spark-label">Leistung · letzte ${HISTORY_HOURS} h</div></div>`;
     }
     view(values,devices,price) {
       this.prepare(devices);
