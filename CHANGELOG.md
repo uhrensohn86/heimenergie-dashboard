@@ -1,5 +1,10 @@
 # Änderungsprotokoll
 
+## 0.4.0-alpha.3 – Leistung im Gerätedetail
+
+- Größerer 12-Stunden-Verlauf mit Watt-Skala und Uhrzeiten in der HA-Zeitzone.
+- Bestehender gemeinsamer Recorder-Abruf wird für die Detailansicht verwendet.
+
 ## 0.4.0-alpha.2 – Zwölf Stunden je Gerätekurve
 
 - Der Recorder-Abruf und die Zeitachse der Gerätekarten umfassen jetzt die letzten zwölf Stunden. Die Zeitraumwahl für Energie und Kosten bleibt unabhängig davon.

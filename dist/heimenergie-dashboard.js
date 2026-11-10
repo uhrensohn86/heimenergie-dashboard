@@ -1,9 +1,9 @@
-/* HeimEnergie Dashboard - v0.4.0-alpha.2 (MIT). No external dependencies. */
+/* HeimEnergie Dashboard - v0.4.0-alpha.3 (MIT). No external dependencies. */
 (() => {
   "use strict";
   const HISTORY_HOURS = 12;
   const HISTORY_WINDOW_MS = HISTORY_HOURS * 60 * 60 * 1000;
-  const VERSION = "0.4.0-alpha.2";
+  const VERSION = "0.4.0-alpha.3";
   const STRATEGY = "heimenergie";
   const PERIODS = [
     ["today", "Heute"], ["week", "Woche"],
@@ -44,7 +44,8 @@
     .device-link { position:absolute; top:6px; right:6px; z-index:1; width:34px; height:34px; display:grid; place-items:center; border:1px solid transparent; background:var(--ha-card-background,var(--card-background-color)); border-radius:10px; color:var(--secondary-text-color); cursor:pointer; }
     .device-link:hover,.device-link:focus-visible { color:var(--primary-color); border-color:var(--divider-color); }
     .device-main:hover { background:var(--secondary-background-color,rgba(127,127,127,.05)); }
-    .device .spark-wrap { margin-top:8px; height:50px; }
+    .device .detail-history{margin:20px 0}.detail-history h3{font-size:16px;font-weight:500}.detail-chart{display:block;width:100%;max-height:360px}.detail-chart text{fill:var(--secondary-text-color);font-size:11px}.detail-chart .spark-path{vector-effect:non-scaling-stroke}
+    .spark-wrap { margin-top:8px; height:50px; }
     .device .spark { display:block; width:100%; height:43px; overflow:visible; }
     .device .spark-path { fill:none; stroke:var(--accent-color,var(--primary-color)); stroke-width:2.4; stroke-linejoin:round; stroke-linecap:round; vector-effect:non-scaling-stroke; }
     .device .spark-empty { height:43px; display:flex; align-items:center; color:var(--secondary-text-color); font-size:11px; }
@@ -224,7 +225,7 @@
     result.push(points.at(-1));
     return result;
   }
-  function sparkline(points, now=Date.now()) {
+  function sparkline(points, now=Date.now(), detail=false, timeZone) {
     const start=now-HISTORY_WINDOW_MS;
     const recent=(points||[]).filter(p=>p.t>=start && p.t<=now+60000);
     const valid=recent.filter(p=>p.v!==null);
@@ -232,16 +233,27 @@
     let maximum=1,minimum=0;
     for(const p of valid) {maximum=Math.max(maximum,p.v);minimum=Math.min(minimum,p.v);}
     const range=Math.max(0.001,maximum-minimum);
+    const width=detail?280:160, height=detail?150:36;
     const samples=thinHistory(recent);
     const segments=[]; let chunk=[];
     for(const p of samples) {
       if(p.v===null) { if(chunk.length>=2)segments.push(chunk); chunk=[]; continue; }
-      const x=Math.max(0,Math.min(160,160*(p.t-start)/(now-start)));
-      const y=40-36*(p.v-minimum)/range;
+      const x=Math.max(0,Math.min(width,width*(p.t-start)/(now-start)));
+      const y=height+4-height*(p.v-minimum)/range;
       chunk.push(`${x.toFixed(2)} ${y.toFixed(2)}`);
     }
     if(chunk.length>=2) segments.push(chunk);
-    return segments.map(coords=>`<path class="spark-path" d="M ${coords.join(" L ")}"></path>`).join("");
+    const paths=segments.map(coords=>`<path class="spark-path" d="M ${coords.join(" L ")}"></path>`).join("");
+    if(!detail) return paths;
+    const formatter=new Intl.DateTimeFormat("de-DE",{hour:"2-digit",minute:"2-digit",...(timeZone?{timeZone}:{})});
+    const grid=[0,0.5,1].map(fraction=>{
+      const y=4+height*(1-fraction);
+      const value=new Intl.NumberFormat("de-DE",{maximumFractionDigits:1}).format(minimum+range*fraction);
+      return `<line x1="0" x2="${width}" y1="${y}" y2="${y}" stroke="var(--divider-color)" /><text x="-8" y="${y+4}" text-anchor="end">${value} W</text>`;
+    }).join("");
+    const times=[0,0.5,1].map(fraction=>`<text x="${width*fraction}" y="${height+26}" text-anchor="${fraction===0?"start":fraction===1?"end":"middle"}">${esc(formatter.format(new Date(start+HISTORY_WINDOW_MS*fraction)))}</text>`).join("");
+    return `<svg class="detail-chart" viewBox="0 0 352 200" role="img" aria-label="Leistungsverlauf der letzten ${HISTORY_HOURS} Stunden, Watt und Uhrzeit"><g transform="translate(64 12)">${grid}${paths}${times}</g></svg>`;
+
   }
 
   class HeimCard extends HTMLElement {
@@ -405,7 +417,7 @@
         ? `<div class="native-detail"><button type="button" data-action="${action}" data-value="${esc(value)}" aria-label="${text}">${icon(deviceId?"mdi:open-in-new":"mdi:information-outline")} ${text}</button></div>`
         : `<button type="button" class="device-link" data-action="${action}" data-value="${esc(value)}" title="${text}" aria-label="${text}">${icon(deviceId?"mdi:open-in-new":"mdi:information-outline")}</button>`;
     }
-    chartFor(d) {
+    chartFor(d,detail=false) {
       const history=this._historyData[d.power]||[];
       const current=inWatts(this._hass,d.power);
       const end=Date.now();
@@ -417,7 +429,8 @@
       // Add the current reading to the end of a real history series; never use it alone
       // to create an invented trend line.
       if(points.length && current!==null && end-points.at(-1).t>15000) points.push({t:end,v:current});
-      const path=sparkline(points,end);
+      const path=sparkline(points,end,detail,this._hass.config?.time_zone);
+      if(detail && path) return `<div class="detail-history"><h3>Leistung · letzte ${HISTORY_HOURS} h</h3>${path}</div>`;
       if(path) return `<div class="spark-wrap"><svg class="spark" viewBox="0 0 160 44" preserveAspectRatio="none" role="img" aria-label="Leistungsverlauf der letzten ${HISTORY_HOURS} Stunden">${path}</svg><div class="spark-label">Leistung · letzte ${HISTORY_HOURS} h</div></div>`;
       const label=this._historyStatus==="loading"?"Verlauf wird geladen …":
         this._historyStatus==="error"?"Verlauf nicht verfügbar":"Keine Verlaufsdaten";
@@ -435,7 +448,7 @@
         <div class="tile"><div class="key">Momentanleistung</div><div class="value">${watts(chosen.power)}</div></div>
         <div class="tile"><div class="key">Energie</div><div class="value">${kwh(chosen.energy)}</div></div>
         <div class="tile"><div class="key">Kosten</div><div class="value">${euro(chosen.cost)}</div></div>
-        </div>${this.nativeButton(chosen.device,true)}<div class="note">${this._source.mode==="backend" ? `Messgerät: ${esc(chosen.device.meter_name||chosen.device.power||"—")}. Sensoren und Verbraucher verwaltest du unter Einstellungen → Geräte & Dienste → HeimEnergie.` : "Zeitraumsensoren können in der manuellen Dashboard-Konfiguration zugeordnet werden."} Die detaillierte historische Auswertung folgt in einer späteren Version.</div>`;
+        </div>${this.chartFor(chosen.device,true)}${this.nativeButton(chosen.device,true)}<div class="note">${this._source.mode==="backend" ? `Messgerät: ${esc(chosen.device.meter_name||chosen.device.power||"—")}. Sensoren und Verbraucher verwaltest du unter Einstellungen → Geräte & Dienste → HeimEnergie.` : "Zeitraumsensoren können in der manuellen Dashboard-Konfiguration zugeordnet werden."}</div>`;
       return `<div class="head"><h2>🔌 Geräte</h2><span class="small muted">${devices.length} eingerichtet</span></div>
         ${this.periodTabs()}
         <div class="actions"><input aria-label="Geräte suchen" data-action="search" placeholder="Geräte suchen…" value="${esc(this._search)}" style="flex:2;min-width:150px">
