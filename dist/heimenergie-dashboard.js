@@ -1,7 +1,7 @@
-/* HeimEnergie Dashboard - v0.3.1-alpha (MIT). No external dependencies. */
+/* HeimEnergie Dashboard - v0.4.0-alpha.1 (MIT). No external dependencies. */
 (() => {
   "use strict";
-  const VERSION = "0.3.1-alpha";
+  const VERSION = "0.4.0-alpha.1";
   const STRATEGY = "heimenergie";
   const PERIODS = [
     ["today", "Heute"], ["week", "Woche"],
@@ -26,19 +26,31 @@
   ];
   const CSS = `
     :host { display:block; color:var(--primary-text-color); }
-    ha-card { padding:18px; border-radius:18px; overflow:hidden; }
+    ha-card { padding:18px; border-radius:var(--ha-card-border-radius,18px); overflow:hidden; }
     .head { display:flex; gap:10px; align-items:center; justify-content:space-between; flex-wrap:wrap; margin:0 0 16px; }
     .head h2 { font-size:21px; margin:0; line-height:1.2; }
     .muted { color:var(--secondary-text-color); }
     .small { font-size:12px; }
     .grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
     .stats { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-bottom:16px; }
-    .tile { padding:14px; background:var(--secondary-background-color,rgba(127,127,127,.1)); border-radius:13px; min-width:0; }
+    .tile { padding:14px; background:var(--secondary-background-color,rgba(127,127,127,.1)); border-radius:var(--ha-card-border-radius,13px); min-width:0; }
     .tile .key { color:var(--secondary-text-color); font-size:12px; line-height:1.3; }
     .tile .value { font-size:23px; font-weight:650; line-height:1.4; overflow-wrap:anywhere; }
     .tile .sub { font-size:12px; color:var(--secondary-text-color); }
-    .device { text-align:left; border:1px solid var(--divider-color); background:var(--card-background-color); border-radius:13px; padding:14px; color:inherit; cursor:pointer; min-width:0; }
-    .device:focus-visible, button:focus-visible { outline:2px solid var(--primary-color); outline-offset:2px; }
+    .device { position:relative; text-align:left; border:1px solid var(--ha-card-border-color,var(--divider-color)); background:var(--ha-card-background,var(--card-background-color)); border-radius:var(--ha-card-border-radius,13px); color:inherit; min-width:0; overflow:hidden; }
+    .device-main { display:block; width:100%; padding:14px 12px 10px; background:transparent; border:0; color:inherit; text-align:left; cursor:pointer; font:inherit; }
+    .device-link { position:absolute; top:6px; right:6px; z-index:1; width:34px; height:34px; display:grid; place-items:center; border:1px solid transparent; background:var(--ha-card-background,var(--card-background-color)); border-radius:10px; color:var(--secondary-text-color); cursor:pointer; }
+    .device-link:hover,.device-link:focus-visible { color:var(--primary-color); border-color:var(--divider-color); }
+    .device-main:hover { background:var(--secondary-background-color,rgba(127,127,127,.05)); }
+    .device .spark-wrap { margin-top:8px; height:50px; }
+    .device .spark { display:block; width:100%; height:43px; overflow:visible; }
+    .device .spark-path { fill:none; stroke:var(--accent-color,var(--primary-color)); stroke-width:2.4; stroke-linejoin:round; stroke-linecap:round; vector-effect:non-scaling-stroke; }
+    .device .spark-empty { height:43px; display:flex; align-items:center; color:var(--secondary-text-color); font-size:11px; }
+    .device .spark-label { color:var(--secondary-text-color); font-size:10px; }
+    .device .name { padding-right:30px; }
+    .native-detail { width:100%; margin:6px 0 12px; display:flex; align-items:center; justify-content:flex-end; }
+    .native-detail button { display:flex; gap:4px; align-items:center; border-radius:9px; border:1px solid var(--divider-color); background:var(--ha-card-background,var(--card-background-color)); color:inherit; font:inherit; font-size:13px; padding:9px; cursor:pointer; }
+    .device:focus-within, button:focus-visible { outline:2px solid var(--primary-color); outline-offset:2px; }
     .device .name { font-weight:600; font-size:14px; overflow-wrap:anywhere; }
     .device .value { font-size:21px; font-weight:650; margin:5px 0 1px; }
     .tabs { display:flex; gap:5px; flex-wrap:wrap; margin:0 0 14px; }
@@ -175,6 +187,61 @@
     };
   }
 
+  // HA returns compact Recorder states: {s:state, lu:unix_seconds, a:attributes}.
+  // The live state is read separately. Never fabricate a zero when Recorder has no history.
+  function normalizeHistory(rows, hass, entity) {
+    if (!Array.isArray(rows)) return [];
+    const unit=String(hass?.states?.[entity]?.attributes?.unit_of_measurement||"W").toLowerCase();
+    const factor=unit==="kw"?1000:unit==="mw"?0.001:1;
+    const points=[];
+    for (const r of rows) {
+      const rawTime=r?.lu ?? r?.lc ?? r?.last_updated ?? r?.last_changed;
+      const t=typeof rawTime==="number" ? (rawTime<1e11?rawTime*1000:rawTime) : Date.parse(rawTime);
+      if (!Number.isFinite(t)) continue;
+      const raw=String(r?.s ?? r?.state ?? "");
+      const numericValue=Number(raw);
+      const v=raw.trim()!=="" && !["unknown","unavailable","none"].includes(raw.toLowerCase()) && Number.isFinite(numericValue) ? numericValue*factor : null;
+      points.push({t,v});
+    }
+    return points.sort((a,b)=>a.t-b.t);
+  }
+  // Min/max decimation preserves spikes, even on phones with many Zigbee samples.
+  function thinHistory(points, max=110) {
+    if (points.length<=max) return points;
+    const result=[points[0]], stride=Math.ceil((points.length-2)/Math.floor((max-2)/2));
+    for(let k=1;k<points.length-1;k+=stride) {
+      const section=points.slice(k,Math.min(k+stride,points.length-1));
+      const valid=section.filter(p=>p.v!==null);
+      if (!valid.length) { result.push(section[0]); continue; }
+      const min=valid.reduce((a,b)=>a.v<b.v?a:b),maxP=valid.reduce((a,b)=>a.v>b.v?a:b);
+      if(min.t===maxP.t) result.push(min);
+      else result.push(...(min.t<maxP.t?[min,maxP]:[maxP,min]));
+      const missing=section.find(p=>p.v===null);
+      if(missing) result.push(missing);
+    }
+    result.push(points.at(-1));
+    return result;
+  }
+  function sparkline(points, now=Date.now()) {
+    const start=now-24*60*60*1000;
+    const recent=(points||[]).filter(p=>p.t>=start && p.t<=now+60000);
+    const valid=recent.filter(p=>p.v!==null);
+    if(valid.length<2) return "";
+    let maximum=1,minimum=0;
+    for(const p of valid) {maximum=Math.max(maximum,p.v);minimum=Math.min(minimum,p.v);}
+    const range=Math.max(0.001,maximum-minimum);
+    const samples=thinHistory(recent);
+    const segments=[]; let chunk=[];
+    for(const p of samples) {
+      if(p.v===null) { if(chunk.length>=2)segments.push(chunk); chunk=[]; continue; }
+      const x=Math.max(0,Math.min(160,160*(p.t-start)/(now-start)));
+      const y=40-36*(p.v-minimum)/range;
+      chunk.push(`${x.toFixed(2)} ${y.toFixed(2)}`);
+    }
+    if(chunk.length>=2) segments.push(chunk);
+    return segments.map(coords=>`<path class="spark-path" d="M ${coords.join(" L ")}"></path>`).join("");
+  }
+
   class HeimCard extends HTMLElement {
     constructor() {
       super(); this.attachShadow({mode:"open"}); this._config = {}; this._hass = null;
@@ -202,6 +269,20 @@
       if (b.dataset.action === "period") this._period = b.dataset.value;
       if (b.dataset.action === "detail") this._detail = b.dataset.value;
       if (b.dataset.action === "back") this._detail = "";
+      if (b.dataset.action === "native-device") {
+        // Navigate only to a device ID returned by HA's own entity registry.
+        const id=b.dataset.value;
+        if (!id || !Object.values(this._deviceMap||{}).includes(id)) return;
+        window.location.assign(`/config/devices/device/${encodeURIComponent(id)}`);
+        return;
+      }
+      if (b.dataset.action === "entity-info") {
+        const entity=b.dataset.value;
+        if (entity && this._source?.devices?.some(d=>d.power===entity)) {
+          this.dispatchEvent(new CustomEvent("hass-more-info",{bubbles:true,composed:true,detail:{entityId:entity}}));
+        }
+        return;
+      }
       this.render();
     }
     onInput(e) {
@@ -257,28 +338,113 @@
   }
 
   class HeimDevices extends HeimCard {
+    constructor() {
+      super();
+      this._historyData={};this._historyStatus="idle";this._historyKey="";
+      this._historyRequestedAt=0;this._historySeq=0;this._historyPending=false;
+      this._deviceMap={};this._registryStatus="idle";this._registryKey="";
+      this._registryRequestedAt=0;this._registryPending=false;this._registrySeq=0;
+    }
+    prepare(devices) {
+      this.loadHistory(devices);
+      this.loadRegistry(devices);
+    }
+    loadRegistry(devices) {
+      if(typeof this._hass?.callWS!=="function") return;
+      const key=[...new Set(devices.map(d=>d.power).filter(Boolean))].sort().join("|");
+      if(this._registryPending && key===this._registryKey) return;
+      if(key===this._registryKey && Date.now()-this._registryRequestedAt<1800000) return;
+      this._registryKey=key;this._registryRequestedAt=Date.now();
+      this._registryPending=true;this._registryStatus="loading";
+      const seq=++this._registrySeq;
+      this._hass.callWS({type:"config/entity_registry/list_for_display"}).then(data=>{
+        if(seq!==this._registrySeq) return;
+        const map={};
+        for(const row of data?.entities||[]) if(typeof row?.ei==="string" && typeof row?.di==="string" && row.di) map[row.ei]=row.di;
+        this._deviceMap=map;this._registryStatus="ready";this._registryPending=false;this.render();
+      }).catch(()=>{if(seq!==this._registrySeq)return;this._registryStatus="error";this._registryPending=false;this.render();});
+    }
+    loadHistory(devices) {
+      if(typeof this._hass?.callWS!=="function") {this._historyStatus="unavailable";return;}
+      const ids=[...new Set(devices.map(d=>d.power).filter(id=>typeof id==="string" && id.startsWith("sensor.")))].sort();
+      const key=ids.join("|");
+      const now=Date.now();
+      if(!ids.length) {this._historyData={};this._historyStatus="empty";return;}
+      if(this._historyPending && this._historyKey===key) return;
+      if(this._historyKey===key && this._historyStatus==="ready" && now-this._historyRequestedAt<300000) return;
+      if(this._historyKey===key && this._historyStatus==="error" && now-this._historyRequestedAt<300000) return;
+      this._historyKey=key;this._historyRequestedAt=now;
+      this._historyStatus="loading";this._historyPending=true;
+      const seq=++this._historySeq;
+      const end=new Date(now),start=new Date(now-24*60*60*1000);
+      this._hass.callWS({
+        type:"history/history_during_period",entity_ids:ids,
+        start_time:start.toISOString(),end_time:end.toISOString(),
+        include_start_time_state:true,significant_changes_only:false,
+        minimal_response:true,no_attributes:true,
+      }).then(result=>{
+        if(seq!==this._historySeq) return;
+        const history={};
+        for(const id of ids) history[id]=normalizeHistory(result?.[id],this._hass,id);
+        this._historyData=history;this._historyStatus="ready";this._historyPending=false;this.render();
+      }).catch(()=>{
+        if(seq!==this._historySeq) return;
+        this._historyStatus="error";this._historyPending=false;this.render();
+      });
+    }
+    nativeButton(d,detail=false) {
+      const sensor=d.power;
+      const deviceId=this._deviceMap[sensor];
+      const action=deviceId?"native-device":"entity-info";
+      const value=deviceId||sensor||"";
+      const text=deviceId?"Home-Assistant-Gerät öffnen":"Sensorinformationen öffnen";
+      if(!value) return "";
+      return detail
+        ? `<div class="native-detail"><button type="button" data-action="${action}" data-value="${esc(value)}" aria-label="${text}">${icon(deviceId?"mdi:open-in-new":"mdi:information-outline")} ${text}</button></div>`
+        : `<button type="button" class="device-link" data-action="${action}" data-value="${esc(value)}" title="${text}" aria-label="${text}">${icon(deviceId?"mdi:open-in-new":"mdi:information-outline")}</button>`;
+    }
+    chartFor(d) {
+      const history=this._historyData[d.power]||[];
+      const current=inWatts(this._hass,d.power);
+      const end=Date.now();
+      const points=history.slice();
+      // Recorder can supply the last known value from before the window.
+      // Carry that known state to the visible left edge, without assuming zero.
+      const start=end-24*60*60*1000;
+      if(points.length && points[0].t<start && points[0].v!==null) points.unshift({t:start,v:points[0].v});
+      // Add the current reading to the end of a real history series; never use it alone
+      // to create an invented trend line.
+      if(points.length && current!==null && end-points.at(-1).t>15000) points.push({t:end,v:current});
+      const path=sparkline(points,end);
+      if(path) return `<div class="spark-wrap"><svg class="spark" viewBox="0 0 160 44" preserveAspectRatio="none" role="img" aria-label="Leistungsverlauf der letzten 24 Stunden">${path}</svg><div class="spark-label">Leistung · letzte 24 h</div></div>`;
+      const label=this._historyStatus==="loading"?"Verlauf wird geladen …":
+        this._historyStatus==="error"?"Verlauf nicht verfügbar":"Keine Verlaufsdaten";
+      return `<div class="spark-wrap"><div class="spark-empty">${label}</div><div class="spark-label">Leistung · letzte 24 h</div></div>`;
+    }
     view(values,devices,price) {
+      this.prepare(devices);
       let sorted = values.filter((x)=>displayName(x.device).toLowerCase().includes(this._search.toLowerCase()));
       if (this._sort==="power") sorted.sort((a,b)=>(b.power??-Infinity)-(a.power??-Infinity));
       else if (this._sort==="cost") sorted.sort((a,b)=>(b.cost??-Infinity)-(a.cost??-Infinity));
       else sorted.sort((a,b)=>displayName(a.device).localeCompare(displayName(b.device),"de"));
       const chosen = values.find((x)=>x.device.power===this._detail);
-      if (chosen && this._detail) return `<div class="head"><h2>${icon(consumerIcon(chosen.device))} ${esc(displayName(chosen.device))}</h2><button data-action="back" class="device">← Alle Geräte</button></div>
+      if (chosen && this._detail) return `<div class="head"><h2>${icon(consumerIcon(chosen.device))} ${esc(displayName(chosen.device))}</h2><button data-action="back" class="device-main" style="width:auto;border:1px solid var(--divider-color);border-radius:10px">← Alle Geräte</button></div>
         ${this.periodTabs()}<div class="stats">
         <div class="tile"><div class="key">Momentanleistung</div><div class="value">${watts(chosen.power)}</div></div>
         <div class="tile"><div class="key">Energie</div><div class="value">${kwh(chosen.energy)}</div></div>
         <div class="tile"><div class="key">Kosten</div><div class="value">${euro(chosen.cost)}</div></div>
-        </div><div class="note">${this._source.mode==="backend" ? `Messgerät: ${esc(chosen.device.meter_name||chosen.device.power||"—")}. Sensoren und Verbraucher verwaltest du unter Einstellungen → Geräte & Dienste → HeimEnergie.` : "Zeitraumsensoren können in der manuellen Dashboard-Konfiguration zugeordnet werden."} Die Detailhistorie folgt in einer späteren Version.</div>`;
+        </div>${this.nativeButton(chosen.device,true)}<div class="note">${this._source.mode==="backend" ? `Messgerät: ${esc(chosen.device.meter_name||chosen.device.power||"—")}. Sensoren und Verbraucher verwaltest du unter Einstellungen → Geräte & Dienste → HeimEnergie.` : "Zeitraumsensoren können in der manuellen Dashboard-Konfiguration zugeordnet werden."} Die detaillierte historische Auswertung folgt in einer späteren Version.</div>`;
       return `<div class="head"><h2>🔌 Geräte</h2><span class="small muted">${devices.length} eingerichtet</span></div>
         ${this.periodTabs()}
         <div class="actions"><input aria-label="Geräte suchen" data-action="search" placeholder="Geräte suchen…" value="${esc(this._search)}" style="flex:2;min-width:150px">
         <select aria-label="Sortierung" data-action="sort" style="flex:1;min-width:130px">
           ${[["name","Name"],["power","Leistung"],["cost","Kosten"]].map(([id,label])=>`<option value="${id}" ${this._sort===id?"selected":""}>${label}</option>`).join("")}
         </select></div>
-        ${sorted.length ? `<div class="grid">${sorted.map((x)=>`<button class="device" data-action="detail" data-value="${esc(x.device.power||"")}">
-          <div class="name">${icon(consumerIcon(x.device))} ${esc(displayName(x.device))}</div><div class="value">${watts(x.power)}</div>
-          <div class="small muted">${kwh(x.energy)}</div><div class="small muted">${euro(x.cost)}</div>
-        </button>`).join("")}</div>` : `<div class="empty">Keine passenden Geräte gefunden.</div>`}`;
+        ${sorted.length ? `<div class="grid">${sorted.map((x)=>`<div class="device">
+          <button type="button" class="device-main" data-action="detail" data-value="${esc(x.device.power||"")}" aria-label="HeimEnergie-Details ${esc(displayName(x.device))}">
+            <div class="name">${icon(consumerIcon(x.device))} ${esc(displayName(x.device))}</div><div class="value">${watts(x.power)}</div>
+            <div class="small muted">${kwh(x.energy)}</div><div class="small muted">${euro(x.cost)}</div>${this.chartFor(x.device)}
+          </button>${this.nativeButton(x.device)}</div>`).join("")}</div>` : `<div class="empty">Keine passenden Geräte gefunden.</div>`}`;
     }
   }
 

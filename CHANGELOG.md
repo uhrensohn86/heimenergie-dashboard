@@ -1,10 +1,17 @@
 # Änderungsprotokoll
 
+## 0.4.0-alpha.1 – Geräteübersicht mit Verlauf und nativer Navigation
+
+- Individuelle 24-h-Leistungsverläufe direkt in jeder Gerätekarte (SVG, Recorder/WS, gemeinsam abgefragt, mobil optimiert)
+- Bestehende Leistung, kWh und Verbrauchskosten unverändert
+- Separates Symbol für die native HA-Geräteseite über die Entitätsregistrierung; Sensordetails als Rückfall
+- Automatische Theme-Farben einschließlich `--accent-color` und Hell-/Dunkelmodus
+- Caching, fehlende Daten, Fehlerfälle und Android-Tests
+- Keine Backend-Änderung, kein manuelles YAML, keine privaten IDs im Repository
+
 ## 0.3.1-alpha – Release- und HACS-Pflege
 
-- HACS-Versionsstand und GitHub-Release-Struktur vereinheitlicht.
-- Automatische GitHub-Actions-Tests vorbereitet.
-- Keine funktionalen Dashboard-Änderungen.
+- Nachvollziehbare GitHub-Releases, CI-Tests und HACS-Versionskennung; keine Änderung der Dashboard-Funktionen
 
 ## 0.3.0-alpha – automatischer Integrationskatalog
 

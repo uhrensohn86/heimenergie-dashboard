@@ -17,6 +17,8 @@ jobs:
         run: node --check dist/heimenergie-dashboard.js
       - name: Smoke-Test
         run: node tests/smoke.cjs
+      - name: Verlauf und Gerätenavigation
+        run: node tests/device_sparklines.cjs
       - name: HACS-Metadaten validieren
         run: |
           node -e "const fs=require('fs');const h=JSON.parse(fs.readFileSync('hacs.json'));if(h.filename!=='heimenergie-dashboard.js')throw Error('HACS-Dateiname');if(!fs.existsSync('dist/'+h.filename))throw Error('Dashboard-Datei fehlt');console.log('HACS-Metadaten OK')"

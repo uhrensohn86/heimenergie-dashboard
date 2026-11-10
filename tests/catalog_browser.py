@@ -53,7 +53,7 @@ with sync_playwright() as p:
     ds=page.locator('heimenergie-devices')
     assert ds.locator('.device').count()==2
     ds.locator('input[data-action="search"]').fill('Beta')
-    assert ds.locator('button.device').count()==1
+    assert ds.locator('button.device-main').count()==1
     # Continuous HA updates must not destroy the focused search field.
     ds.locator('input[data-action="search"]').focus()
     result=page.evaluate('''() => {
